@@ -13,6 +13,7 @@ import { calculateSafeConcurrency } from 'src/helpers/calculateSafeConcurrency';
 import { Request, Response } from 'express';
 import { catchError, map, Observable, throwError } from 'rxjs';
 import * as os from 'os';
+import geoip from 'geoip-lite';
 
 const RECENT_ERRORS_SIZE = 10;
 const recentErrors: string[] = [];
@@ -93,6 +94,14 @@ export class LoggerInterceptor implements NestInterceptor {
           ERROR_RATE_THRESHOLD,
         );
 
+        // Geometric metrics
+        const clientIp =
+          request.headers['x-forwarded-for']?.toString().split(',')[0] ||
+          request.socket.remoteAddress;
+        const geo = geoip.lookup(clientIp || '');
+        const clientRegion = geo ? geo.region : 'unknown';
+        const clientCountry = geo ? geo.country : 'unknown';
+
         const metrics = {
           // Response capability 30%
           latency: `${duration}ms`,
@@ -115,6 +124,11 @@ export class LoggerInterceptor implements NestInterceptor {
 
           // Priority 10%
           priority: process.env.PRIORITY || 'normal',
+
+          // Geographic 10%
+          clientIp: clientIp || 'unknown',
+          clientRegion: clientRegion || 'unknown',
+          clientCountry: clientCountry || 'unknown',
 
           hostname: os.hostname(),
           freememory: formatBytes(os.freemem()),
