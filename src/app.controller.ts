@@ -8,7 +8,17 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  getHello(): Record<string, unknown> {
+  async getHello(): Promise<Record<string, unknown>> {
     return this.appService.getHello();
+  }
+
+  @Get('multiple')
+  async getMultipleResponses(): Promise<Record<string, unknown>[]> {
+    return this.appService.getMultipleResponses();
+  }
+
+  @Get('pokemon')
+  async fetchPokemon(): Promise<Record<string, unknown>> {
+    return this.appService.fetchPokemon();
   }
 }
