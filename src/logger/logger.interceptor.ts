@@ -25,6 +25,8 @@ const concurrencyLatencyHistory: { concurrent: number; latency: number }[] = [];
 const LATENCY_THRESHOLD = 500;
 const ERROR_RATE_THRESHOLD = 0.05;
 
+const SERVICE_PRIORITY = process.env.SERVICE_PRIORITY || 'normal';
+
 let concurrentRequests = 0;
 let totalRequests = 0;
 let totalErrors = 0;
@@ -110,6 +112,9 @@ export class LoggerInterceptor implements NestInterceptor {
 
           //Concurrency 15%
           safeConcurrency: safeConcurrency,
+
+          // Priority 10%
+          priority: process.env.PRIORITY || 'normal',
 
           hostname: os.hostname(),
           freememory: formatBytes(os.freemem()),
