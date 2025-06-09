@@ -8,15 +8,23 @@ import {
 import { formatBytes } from 'src/helpers/formatBytes';
 import { calculateJitter } from 'src/helpers/calculateJitter';
 import { calculateBandwidth } from 'src/helpers/calculateBandwidth';
+import { calculateSafeConcurrency } from 'src/helpers/calculateSafeConcurrency';
 
 import { Request, Response } from 'express';
 import { catchError, map, Observable, throwError } from 'rxjs';
 import * as os from 'os';
 
-const LATENCY_HISTORY_SIZE = 20;
 const RECENT_ERRORS_SIZE = 10;
-const latencyHistory: number[] = [];
 const recentErrors: string[] = [];
+
+const LATENCY_HISTORY_SIZE = 20;
+const latencyHistory: number[] = [];
+
+const CONCURRENCY_LATENCY_HISTORY_SIZE = 100;
+const concurrencyLatencyHistory: { concurrent: number; latency: number }[] = [];
+const LATENCY_THRESHOLD = 500;
+const ERROR_RATE_THRESHOLD = 0.05;
+
 let concurrentRequests = 0;
 let totalRequests = 0;
 let totalErrors = 0;
@@ -66,6 +74,23 @@ export class LoggerInterceptor implements NestInterceptor {
         );
         const bandwidthResult = calculateBandwidth(responseSizeBytes, duration);
 
+        // Calculate concurrency latency
+        concurrencyLatencyHistory.push({
+          concurrent: concurrentRequests,
+          latency: duration,
+        });
+        if (
+          concurrencyLatencyHistory.length > CONCURRENCY_LATENCY_HISTORY_SIZE
+        ) {
+          concurrencyLatencyHistory.shift();
+        }
+        const safeConcurrency = calculateSafeConcurrency(
+          concurrencyLatencyHistory,
+          LATENCY_THRESHOLD,
+          totalRequests > 0 ? totalErrors / totalRequests : 0,
+          ERROR_RATE_THRESHOLD,
+        );
+
         const metrics = {
           // Response capability 30%
           latency: `${duration}ms`,
@@ -82,6 +107,9 @@ export class LoggerInterceptor implements NestInterceptor {
           totalErrors,
           recentErrors,
           errorRate: totalRequests > 0 ? totalErrors / totalRequests : 0,
+
+          //Concurrency 15%
+          safeConcurrency: safeConcurrency,
 
           hostname: os.hostname(),
           freememory: formatBytes(os.freemem()),
