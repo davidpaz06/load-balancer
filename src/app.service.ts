@@ -126,6 +126,7 @@ export class AppService {
       statusCode: res.statusCode,
       metrics,
       data: data,
+      server: process.env.PORT || 'unknown server',
     };
   }
 
@@ -137,33 +138,5 @@ export class AppService {
       recentErrors: this.recentErrors,
       uptime: process.uptime(),
     };
-  }
-
-  async getHello(): Promise<{ response: string }> {
-    const time = Math.floor(Math.random() * 2000) + 1;
-    await new Promise((resolve) => setTimeout(resolve, time));
-    return { response: 'Hello from Load Balancer! (app.service.ts)' };
-  }
-
-  async getMultipleResponses(): Promise<{ response: string }[]> {
-    const responses: { response: string }[] = [];
-    for (let i = 0; i < 10; i++) {
-      responses.push({ response: `Response ${i + 1} from Load Balancer!` });
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-    return responses;
-  }
-
-  async getErrorResponse(): Promise<{ error: string }> {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    throw new Error('This is a simulated error response from Load Balancer!');
-  }
-
-  async fetchPokemon(): Promise<any> {
-    const response = await fetch('https://pokeapi.co/api/v2/pokemon/squirtle');
-    if (!response.ok) {
-      throw new Error('Failed to fetch Pokemon data');
-    }
-    return response.json();
   }
 }

@@ -14,42 +14,64 @@ import { AppService } from 'src/app.service';
 const servers = [
   'http://localhost:4001',
   'http://localhost:4002',
-  'http://localhost:4003',
+  // 'http://localhost:4003',
 ];
 
 const calculateScore = (metrics: any): number => {
-  const latencyScore = 1 - Math.min(metrics.latency / 1000, 1);
-  const jitterScore = 1 - Math.min(metrics.jitter / 500, 1);
-  const availabilityScore = Math.min(metrics.uptime / 3600, 1);
+  console.log('Calculating score with metrics... \n');
+  const latencyScore = 1 - Math.min(parseMetric(metrics.latency) / 1000, 1);
+  console.log('latencyScore: ', latencyScore);
+  const jitterScore = 1 - Math.min(parseMetric(metrics.jitter) / 500, 1);
+  console.log('jitterScore: ', jitterScore);
+  const availabilityScore = Math.min(parseMetric(metrics.uptime) / 3600, 1);
+  console.log('availabilityScore: ', availabilityScore);
   const resourceScore =
     1 -
     Math.min(metrics.memoryUsage.heapUsed / metrics.memoryUsage.heapTotal, 1);
+  console.log('resourceScore: ', resourceScore);
   const errorRateScore = 1 - Math.min(metrics.errorRate, 1);
+  console.log('errorRateScore: ', errorRateScore);
   const concurrencyScore = Math.min(metrics.safeConcurrency / 100, 1);
+  console.log('concurrencyScore: ', concurrencyScore);
   const priorityScore = metrics.priority === 'critical' ? 1 : 0.5;
+  console.log('priorityScore: ', priorityScore);
 
-  return (
+  const total =
     0.3 * ((latencyScore + jitterScore + availabilityScore) / 3) +
     0.25 * resourceScore +
     0.2 * errorRateScore +
     0.15 * concurrencyScore +
-    0.1 * priorityScore
-  );
+    0.1 * priorityScore;
+
+  console.log('Total score:', total);
+
+  return total;
+};
+
+const parseMetric = (value: any) => {
+  if (typeof value === 'string' && value.endsWith('ms')) {
+    return parseFloat(value.replace('ms', ''));
+  }
+  return value;
 };
 
 @UseInterceptors(LoggerInterceptor)
-@Controller('api')
+@Controller('proxy')
 export class ProxyController {
   constructor(private readonly appService: AppService) {}
   @All('*path')
   async handleRequestScore(@Req() req: Request, @Res() res: Response) {
-    console.log('handling score request');
-
     const scores = await Promise.all(
       servers.map(async (server) => {
         try {
-          const metricsRes = await fetch(`${server}/api/metrics`);
+          const metricsRes = await fetch(
+            `${server}/api${req.url.replace(/^\/proxy/, '')}`,
+          );
           const { metrics } = await metricsRes.json();
+          console.log('server and metrics: ', {
+            server,
+            metrics,
+          });
           return { server, score: calculateScore(metrics) };
         } catch {
           return { server, score: 0 };
@@ -59,24 +81,19 @@ export class ProxyController {
 
     const best = scores.reduce((a, b) => (a.score > b.score ? a : b));
 
-    return createProxyMiddleware({ target: best.server, changeOrigin: true })(
-      req,
-      res,
-    );
-  }
+    const url = `${best.server}/api${req.url.replace(/^\/proxy/, '')}`;
+    const backendRes = await fetch(url, { method: req.method });
+    const data = await backendRes.json();
+    console.log('backendRes: ', data);
 
-  @Get()
-  async getHello(): Promise<Record<string, unknown>> {
-    return this.appService.getHello();
-  }
+    const score = data.metrics ? calculateScore(data.metrics) : 0;
 
-  @Get('error')
-  async getErrorResponse(): Promise<Record<string, unknown>> {
-    return this.appService.getErrorResponse();
-  }
-
-  @Get('multiple')
-  async getMultipleResponses(): Promise<Record<string, unknown>[]> {
-    return this.appService.getMultipleResponses();
+    res.status(backendRes.status).json({
+      ...data,
+      proxy: {
+        backend: best.server,
+        scorecore: `${Number(score.toFixed(2)) * 100}pts.`,
+      },
+    });
   }
 }
